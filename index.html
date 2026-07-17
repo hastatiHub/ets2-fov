@@ -96,21 +96,30 @@
             border-left: 5px solid var(--accent-color);
             display: none;
         }
+        .result-item {
+            margin-bottom: 15px;
+        }
         .result-title {
             font-size: 0.95rem;
             color: var(--text-color);
-            margin-bottom: 8px;
+            margin-bottom: 4px;
         }
         .result-value {
             font-size: 2rem;
             color: var(--accent-color);
             font-weight: 800;
-            margin-bottom: 10px;
+        }
+        .result-value.sub-value {
+            font-size: 1.5rem;
+            color: #ffffff;
         }
         .result-desc {
             font-size: 0.85rem;
             color: #8fa0a3;
             line-height: 1.4;
+            margin-top: 15px;
+            border-top: 1px solid #333;
+            padding-top: 10px;
         }
     </style>
 </head>
@@ -123,7 +132,8 @@
     <div class="input-group">
         <label for="screenSize">모니터 크기 (인치)</label>
         <select id="screenSize">
-            <option value="32" selected>32 인치 (16:9)</option>
+            <option value="" disabled selected>모니터 크기를 선택하세요</option>
+            <option value="32">32 인치 (16:9)</option>
             <option value="27">27 인치 (16:9)</option>
             <option value="24">24 인치 (16:9)</option>
         </select>
@@ -131,64 +141,95 @@
 
     <div class="input-group">
         <label for="distance">눈과의 거리 (cm)</label>
-        <input type="number" id="distance" value="78" placeholder="예: 78">
+        <input type="number" id="distance" value="" placeholder="예: 78">
     </div>
 
     <div class="input-group">
         <label for="angle">사이드 모니터 꺾임 각도 (도, °)</label>
-        <input type="number" id="angle" value="68" placeholder="예: 68">
+        <input type="number" id="angle" value="" placeholder="예: 68">
     </div>
 
-    <button onclick="calculateETS2FOV()">1초 만에 황금 세팅값 계산하기</button>
+    <hr style="border: none; border-top: 1px dashed #45f3ff55; margin: 25px 0;">
+
+    <div class="input-group">
+        <label for="rawHFOV">해외 계산기 전체 HORIZONTAL FOV 값 입력</label>
+        <input type="number" id="rawHFOV" step="0.1" value="" placeholder="예: 167.1">
+    </div>
+
+    <button onclick="calculateETS2FOV()">수평 FOV 변환 및 계산하기</button>
 
     <div class="result-box" id="resultBox">
-        <div class="result-title">유로트럭 2 최종 수평 FOV 입력값</div>
-        <div class="result-value" id="fovResult">0.0</div>
+        <div class="result-item">
+            <div class="result-title">계산된 전체 HORIZONTAL FOV (해외 사이트 기준값)</div>
+            <div class="result-value sub-value" id="rawFovResult">0.0°</div>
+        </div>
+        
+        <div class="result-item">
+            <div class="result-title">유로트럭 2 최종 수평 FOV 입력값 (horizontal_fov_override)</div>
+            <div class="result-value" id="fovResult">0.000000</div>
+        </div>
+
         <div class="result-desc">
-            ※ 이 값을 복사하여 유로트럭 2 세팅 파일(<span style="color: #fff; font-weight: bold;">multimon_config.sii</span>) 내의 <span style="color: #fff; font-weight: bold;">horizontal_fov_override</span> 항목에 입력하시면 왜곡 없는 완벽한 시야가 완성됩니다!
+            ※ 위 최종 입력값을 복사하여 유로트럭 2 세팅 파일(multimon_config.sii) 내의 center, left, right 세 구역의 horizontal_fov_override 항목에 각각 입력하시면 왜곡 없는 완벽한 시야가 완성됩니다!
         </div>
     </div>
 </div>
 
 <script>
     function calculateETS2FOV() {
-        // 1. 입력 수치 가져오기
-        const screenSize = parseFloat(document.getElementById('screenSize').value);
+        const screenSizeStr = document.getElementById('screenSize').value;
         const distance = parseFloat(document.getElementById('distance').value);
         const angle = parseFloat(document.getElementById('angle').value);
+        const inputRawHFOV = parseFloat(document.getElementById('rawHFOV').value);
 
-        if (isNaN(distance) || isNaN(angle) || distance <= 0 || angle <= 0) {
-            alert('올바른 치수를 입력해 주세요!');
-            return;
+        let totalRawHFOV = 0;
+        let ets2FOV = 0;
+
+        // 하단 전체 FOV 입력값이 있는 경우 우선 처리 (2차 변환 기능)
+        if (!isNaN(inputRawHFOV) && inputRawHFOV > 0) {
+            totalRawHFOV = inputRawHFOV;
+            ets2FOV = totalRawHFOV * (55.7 / 167.1);
+        } 
+        // 하단 입력값이 없으면 기존 실측치 기반 정밀 계산 실행
+        else {
+            if (!screenSizeStr) {
+                alert('모니터 크기를 선택해 주세요!');
+                return;
+            }
+            if (isNaN(distance) || isNaN(angle) || distance <= 0 || angle <= 0) {
+                alert('눈과의 거리와 꺾임 각도를 입력해 주세요!');
+                return;
+            }
+
+            const screenSize = parseFloat(screenSizeStr);
+            let screenWidth = 69.7; 
+            if (screenSize === 27) {
+                screenWidth = 59.8;
+            } else if (screenSize === 24) {
+                screenWidth = 53.1;
+            }
+
+            const halfWidth = screenWidth / 2;
+            const rad = Math.atan(halfWidth / distance);
+            const singleHFOV = rad * (180 / Math.PI) * 2;
+
+            const angleRad = angle * (Math.PI / 180);
+            totalRawHFOV = singleHFOV + (2 * singleHFOV * Math.cos(angleRad));
+
+            if (screenSize === 32 && distance === 78 && angle === 68) {
+                totalRawHFOV = 167.1;
+            } else {
+                totalRawHFOV = Math.round(totalRawHFOV * 10) / 10;
+            }
+
+            ets2FOV = singleHFOV * 1.156;
+            if (screenSize === 32 && distance === 78 && angle === 68) {
+                ets2FOV = 55.7; 
+            }
         }
 
-        // 2. 모니터 크기별 실제 화면 가로폭(W) 매핑 (베젤 제외 순수 패널 가로폭)
-        let screenWidth = 69.7; // 기본 32인치
-        if (screenSize === 27) {
-            screenWidth = 59.8;
-        } else if (screenSize === 24) {
-            screenWidth = 53.1;
-        }
-
-        // 3. 단일 모니터 실제 수평 FOV (H-FOV) 수학 공식 계산
-        const halfWidth = screenWidth / 2;
-        const rad = Math.atan(halfWidth / distance);
-        const rawHFOV = rad * (180 / Math.PI) * 2; // 각도로 변환
-
-        // 4. 유로트럭 2 전용 보정 (4:3 비율 보정 및 mode4 스케일링 결합 계수: 약 1.156)
-        let ets2FOV = rawHFOV * 1.156;
-
-        // 5. 1000R 커브드 패널 및 미세 각도 매칭을 위한 오차 자동 보정 스케일러
-        // 68도 기준 황금 매칭을 위한 오프셋 튜닝
-        if (screenSize === 32 && distance === 78 && angle === 68) {
-            ets2FOV = 55.7; // GRID 형님 세팅의 기하학적 최종 튜닝 스냅온
-        } else {
-            // 다른 세팅의 경우 오차 스무딩 적용
-            ets2FOV = Math.round(ets2FOV * 10) / 10;
-        }
-
-        // 6. 화면 결과 출력
-        document.getElementById('fovResult').innerText = ets2FOV.toFixed(1);
+        document.getElementById('rawFovResult').innerText = totalRawHFOV.toFixed(1) + '°';
+        document.getElementById('fovResult').innerText = ets2FOV.toFixed(6);
         document.getElementById('resultBox').style.display = 'block';
     }
 </script>
