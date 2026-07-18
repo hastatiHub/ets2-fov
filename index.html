@@ -185,49 +185,48 @@
         let totalRawHFOV = 0;
         let ets2FOV = 0;
 
-        // 하단 전체 FOV 입력값이 있는 경우 우선 처리 (2차 변환 기능)
+        // 1. 모니터 크기별 물리적 가로 길이 설정 (베젤 제외 순수 액정 화면 가로 치수)
+        let screenWidth = 69.73; 
+        if (screenSizeStr === "27") screenWidth = 59.77;
+        if (screenSizeStr === "24") screenWidth = 53.13;
+
+        // 2. 필수 입력값 검증 (거리값은 공통 필수)
+        if (isNaN(distance) || distance <= 0) {
+            alert('눈과의 거리를 정확히 입력해 주세요!');
+            return;
+        }
+
+        // 3. 중앙 모니터의 물리적 삼각함수 기반 단일 HFOV 계산
+        const halfWidth = screenWidth / 2;
+        const centerRad = Math.atan(halfWidth / distance);
+        const singleHFOV = centerRad * (180 / Math.PI) * 2;
+
+        // 4. 유로트럭 2 최종 수평 FOV 계산 (탄젠트 기반 독립 렌더링 스케일 보정 1.156 반영)
+        const ets2Rad = Math.atan(Math.tan(centerRad) * 1.156);
+        ets2FOV = ets2Rad * (180 / Math.PI) * 2;
+
+        // 5. 입력 방식 분기 처리
         if (!isNaN(inputRawHFOV) && inputRawHFOV > 0) {
+            // 하단 해외 계산기 전체 값이 직접 들어온 경우 우선 연동
             totalRawHFOV = inputRawHFOV;
-            ets2FOV = totalRawHFOV * (55.7 / 167.1);
-        } 
-        // 하단 입력값이 없으면 기존 실측치 기반 정밀 계산 실행
-        else {
+        } else {
+            // 상단 실측치 기반 계산일 때 수학적으로 정확한 합산 뷰포트 FOV 도출
             if (!screenSizeStr) {
                 alert('모니터 크기를 선택해 주세요!');
                 return;
             }
-            if (isNaN(distance) || isNaN(angle) || distance <= 0 || angle <= 0) {
-                alert('눈과의 거리와 꺾임 각도를 입력해 주세요!');
+            if (isNaN(angle) || angle <= 0) {
+                alert('사이드 모니터 꺾임 각도를 입력해 주세요!');
                 return;
             }
-
-            const screenSize = parseFloat(screenSizeStr);
-            let screenWidth = 69.7; 
-            if (screenSize === 27) {
-                screenWidth = 59.8;
-            } else if (screenSize === 24) {
-                screenWidth = 53.1;
-            }
-
-            const halfWidth = screenWidth / 2;
-            const rad = Math.atan(halfWidth / distance);
-            const singleHFOV = rad * (180 / Math.PI) * 2;
-
+            
             const angleRad = angle * (Math.PI / 180);
-            totalRawHFOV = singleHFOV + (2 * singleHFOV * Math.cos(angleRad));
-
-            if (screenSize === 32 && distance === 78 && angle === 68) {
-                totalRawHFOV = 167.1;
-            } else {
-                totalRawHFOV = Math.round(totalRawHFOV * 10) / 10;
-            }
-
-            ets2FOV = singleHFOV * 1.156;
-            if (screenSize === 32 && distance === 78 && angle === 68) {
-                ets2FOV = 55.7; 
-            }
+            const sideRad = Math.atan((halfWidth * Math.cos(angleRad)) / (distance + halfWidth * Math.sin(angleRad)));
+            totalRawHFOV = singleHFOV + (sideRad * (180 / Math.PI) * 2);
+            totalRawHFOV = Math.round(totalRawHFOV * 10) / 10;
         }
 
+        // 결과 화면 출력 (소수점 6자리 적용)
         document.getElementById('rawFovResult').innerText = totalRawHFOV.toFixed(1) + '°';
         document.getElementById('fovResult').innerText = ets2FOV.toFixed(6);
         document.getElementById('resultBox').style.display = 'block';
